@@ -25,8 +25,8 @@ test_list_all_exact_suite_coverage() {
     done | LC_ALL=C sort
   )
   [ -n "$listed" ] || fail "--list --all printed nothing"
-  missing=$(comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$listed") || true)
-  extra=$(comm -13 <(printf '%s\n' "$expected") <(printf '%s\n' "$listed") || true)
+  missing=$(LC_ALL=C comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$listed") || true)
+  extra=$(LC_ALL=C comm -13 <(printf '%s\n' "$expected") <(printf '%s\n' "$listed") || true)
   [ -z "$missing" ] || fail "--list --all missing scripts: $missing"
   [ -z "$extra" ] || fail "--list --all unexpected scripts: $extra"
   # No duplicates.
@@ -1058,7 +1058,7 @@ test_portable_shard_union_and_coverage_guard() {
   herdr=$("$RUNNER" --list --family real-herdr-gated)
   [ -n "$s1" ] && [ -n "$s2" ] || fail "portable parallel shards must be non-empty"
   # Shards disjoint.
-  overlap=$(comm -12 <(printf '%s\n' "$s1" | LC_ALL=C sort) <(printf '%s\n' "$s2" | LC_ALL=C sort) || true)
+  overlap=$(LC_ALL=C comm -12 <(printf '%s\n' "$s1" | LC_ALL=C sort) <(printf '%s\n' "$s2" | LC_ALL=C sort) || true)
   [ -z "$overlap" ] || fail "portable parallel shards overlap: $overlap"
   # Union of shards equals proven-isolated.
   [ "$(printf '%s\n' "$s1" "$s2" | LC_ALL=C sort -u)" = \
@@ -1086,6 +1086,24 @@ test_portable_shard_union_and_coverage_guard() {
       || fail "$lane membership must be stored longest-measured-first"
   done
   pass "portable shard union, disjointness, and coverage guard hold"
+}
+
+test_coverage_guard_is_locale_stable() {
+  local candidate loc out
+  for candidate in en_US.UTF-8 en_US.utf8 en_GB.UTF-8 en_GB.utf8; do
+    if locale -a 2>/dev/null | grep -qi "^${candidate}$"; then
+      loc="$candidate"
+      break
+    fi
+  done
+  if [ -z "$loc" ]; then
+    loc=$(locale -a 2>/dev/null | grep -iE 'utf8|utf-8' | grep -ivE '^(c|posix)' | head -n 1 || true)
+  fi
+  [ -n "$loc" ] || { pass "coverage guard locale stability skipped (no UTF-8 locale found)"; return 0; }
+  out=$(LC_ALL="$loc" "$RUNNER" --check-coverage 2>&1) \
+    || fail "coverage guard must succeed under $loc: $out"
+  assert_contains "$out" "FM_TEST_COVERAGE ok" "coverage guard success marker under $loc"
+  pass "coverage guard comm comparisons are locale-stable ($loc)"
 }
 
 # The two parallel lanes are only "duration-balanced" while every member has a
@@ -1761,6 +1779,7 @@ test_exclude_family
 test_list_scheduled_proven_isolated_uses_serial_weights
 test_list_scheduled_non_lane_selections_use_serial_weights
 test_portable_shard_union_and_coverage_guard
+test_coverage_guard_is_locale_stable
 test_portable_parallel_lanes_stay_duration_balanced
 test_portable_serial_shards_partition_the_serial_lane
 test_portable_serial_hint_coverage_is_reported_and_bounded
