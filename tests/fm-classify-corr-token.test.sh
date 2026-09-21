@@ -288,6 +288,25 @@ test_captain_relevance_and_pause_are_unchanged_without_a_token() {
   pass "untokened captain-relevance, pause, terminal-verb and captain-held verdicts are unchanged"
 }
 
+# A generated worker brief now tells agents to use blocked:, but legacy workers
+# may still produce this exact known sentence. It must wake Firstmate without
+# promoting ordinary working prose or overriding a home's configured vocabulary.
+test_awaiting_firstmate_instruction_is_actionable() {
+  status_is_captain_relevant 'working: awaiting Firstmate instruction' \
+    || fail "a worker awaiting Firstmate instruction was treated as routine"
+  status_is_captain_relevant 'working [at=1700000000]: awaiting firstmate instruction' \
+    || fail "a stamped worker awaiting Firstmate instruction was treated as routine"
+  status_is_captain_relevant 'working: awaiting Firstmate attention' \
+    && fail "unproven awaiting-attention wording widened status triage"
+  status_is_captain_relevant 'working: awaiting Firstmate instruction after CI' \
+    && fail "additional prose widened the legacy awaiting-instruction exception"
+  (
+    FM_CAPTAIN_RE='done:'
+    status_is_captain_relevant 'working: awaiting Firstmate instruction'
+  ) && fail "a custom status vocabulary did not override the legacy exception"
+  pass "the exact legacy awaiting-Firstmate-instruction status is actionable"
+}
+
 test_consumer_verdicts_read_through_the_token() {
   # A token must not hide a captain-facing event from the supervisors, and must
   # not let a nonterminal line be escalated as one. Both were live: an untreated
@@ -770,6 +789,7 @@ test_untokened_pair_is_unchanged
 test_prose_and_malformed_tokens_never_become_transitions
 test_token_first_word_never_impersonates_a_transition
 test_captain_relevance_and_pause_are_unchanged_without_a_token
+test_awaiting_firstmate_instruction_is_actionable
 test_consumer_verdicts_read_through_the_token
 test_daemon_and_crew_state_case_arms_read_through_the_token
 test_pending_reply_escalation_matching_is_unaffected

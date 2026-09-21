@@ -221,6 +221,31 @@ test_ship_modes_generate_clean_briefs() {
   pass "fm-brief.sh: no-mistakes/direct-PR/local-only briefs generate cleanly"
 }
 
+# A worker stopped for Firstmate input needs an actionable status event rather
+# than a routine working update, or event-driven supervision has nothing to do.
+test_ship_and_scout_make_firstmate_attention_actionable() {
+  local home kind id brief
+  home="$TMP_ROOT/firstmate-attention-home"
+  mkdir -p "$home/data"
+
+  for kind in ship scout; do
+    id="brief-firstmate-attention-$kind"
+    if [ "$kind" = scout ]; then
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --scout >/dev/null \
+        || fail "scout scaffold failed"
+    else
+      FM_HOME="$home" "$ROOT/bin/fm-brief.sh" "$id" some-proj --mode no-mistakes >/dev/null \
+        || fail "ship scaffold failed"
+    fi
+    brief="$home/data/$id/brief.md"
+    assert_grep 'append `blocked [at=<epoch>]: awaiting Firstmate instruction` and stop' "$brief" \
+      "$kind brief did not make Firstmate input actionable"
+    assert_grep 'never report that state as `working:`' "$brief" \
+      "$kind brief did not reject routine reporting while parked for Firstmate"
+  done
+  pass "fm-brief.sh: ship and scout workers report Firstmate input as blocked"
+}
+
 # A ship task's delivery mode is firstmate's per-task decision, so a missing or
 # unusable value must stop the scaffold instead of silently defaulting. The
 # no-mistakes-prod-only row is the conditional registry policy: it is never a task
@@ -1065,6 +1090,7 @@ test_script_parses
 test_no_heredoc_in_command_substitution
 test_help_includes_entire_header
 test_ship_modes_generate_clean_briefs
+test_ship_and_scout_make_firstmate_attention_actionable
 test_ship_mode_is_required_and_closed_set
 test_ship_mode_is_explicit_not_registry
 test_delivery_flags_are_refused_where_they_do_not_apply

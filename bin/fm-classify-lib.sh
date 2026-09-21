@@ -202,20 +202,34 @@ status_is_terminal_verb() {
 }
 
 # 0 if the given (last) status line matches a captain-relevant verb.
-# Verb-aware by default: terminal verbs always match; nonterminal progress verbs
-# (working, resolved, captain-held) and paused never match from free-text prose;
-# only lines without those leading verbs may still match free-text tokens for
+# Verb-aware by default: terminal verbs always match; normal nonterminal progress
+# verbs (working, resolved, captain-held) and paused never match from free-text
+# prose. The sole working exception is the exact legacy declaration "awaiting
+# Firstmate instruction", because that worker has stopped for supervisor input.
+# Only lines without those leading verbs may still match free-text tokens for
 # legacy bare lines such as "merged" or "PR ready".
 # Regex matching ignores any emission-time tag before the first colon - here and
 # in the shared event scan, the module's two FM_CAPTAIN_RE sites - so an override
 # keeps matching a stamped event however the worker spelled the stamp; other
 # metadata and note text remain intact, as do the stored and surfaced event bytes.
 status_is_captain_relevant() {
-  local line=$1 verb unstamped
+  local line=$1 verb unstamped note
   [ -n "$line" ] || return 1
   status_line_verb "$line" verb
   case "$verb" in
-    working|resolved|captain-held|"${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}")
+    working)
+      # Older workers can still report this exact sentence despite the generated
+      # brief now requiring blocked:. Keep the exception narrow so ordinary
+      # working progress remains silent and an explicit regex override still
+      # owns its complete vocabulary.
+      if [ -z "${FM_CAPTAIN_RE+x}" ]; then
+        note=$(status_line_note "$line")
+        _fm_classify_matches "$note" '^[[:space:]]*awaiting[[:space:]]+firstmate[[:space:]]+instruction[[:space:]]*$' \
+          && return 0
+      fi
+      return 1
+      ;;
+    resolved|captain-held|"${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}")
       return 1
       ;;
   esac
